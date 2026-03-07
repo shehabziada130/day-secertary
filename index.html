@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#080808">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Day Command">
+<link rel="manifest" href="manifest.json">
+<title>Day Command</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --bg:#080808;--bg2:#0d0d0d;--bg3:#111;
+  --b1:#1e1e1e;--b2:#2a2a2a;--b3:#333;
+  --t1:#e8e8e0;--t2:#aaa;--t3:#666;--t4:#444;
+  --red:#cc4444;--green:#44aa44;--blue:#7878cc;--gold:#cc9933;--orange:#ff6600;
+  --mono:'Courier New',Courier,monospace;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--t1);font-family:var(--mono);display:flex;flex-direction:column}
+
+/* SCANLINES */
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.05) 2px,rgba(0,0,0,0.05) 4px);pointer-events:none;z-index:999}
+
+/* HEADER */
+#hdr{background:var(--bg2);border-bottom:1px solid var(--b3);padding:calc(12px + var(--safe-top)) 18px 12px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.hdr-left .sub{font-size:10px;letter-spacing:4px;color:var(--t4);text-transform:uppercase}
+.hdr-left .main{font-size:19px;letter-spacing:2px;font-weight:bold}
+.hdr-right{text-align:right}
+#clock{font-size:18px;letter-spacing:2px;color:var(--red);font-weight:bold}
+#dateline{font-size:10px;color:var(--t4);letter-spacing:1px;margin-top:1px}
+
+/* NAV */
+#nav{background:var(--bg2);border-bottom:1px solid var(--b1);display:flex;flex-shrink:0;overflow-x:auto}
+#nav::-webkit-scrollbar{display:none}
+.ntab{padding:10px 16px;font-family:var(--mono);font-size:11px;letter-spacing:3px;text-transform:uppercase;background:none;border:none;border-bottom:2px solid transparent;color:var(--t4);cursor:pointer;white-space:nowrap;transition:color .15s,border-color .15s}
+.ntab.on{color:var(--t1);border-bottom-color:var(--red)}
+
+/* SCROLL AREA */
+#scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#scroll::-webkit-scrollbar{width:3px}
+#scroll::-webkit-scrollbar-thumb{background:var(--b3)}
+.page{display:none;max-width:680px;margin:0 auto;padding:20px 16px calc(32px + var(--safe-bot))}
+.page.on{display:block}
+
+/* FIELDS */
+.flabel{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+.flabel .lm{font-size:11px;letter-spacing:3px;text-transform:uppercase;font-weight:bold}
+.flabel .ls{font-size:11px;color:var(--t4)}
+.fblock{margin-bottom:22px}
+textarea,input[type=text],input[type=password]{width:100%;background:var(--bg3);color:var(--t1);font-family:var(--mono);font-size:14px;line-height:1.7;padding:12px 14px;border:1px solid transparent;outline:none;resize:none;-webkit-appearance:none;border-radius:0}
+textarea:focus,input:focus{border-color:rgba(255,255,255,0.1)}
+.f-goals textarea{border-left:3px solid var(--green)}
+.f-commit textarea{border-left:3px solid var(--red)}
+.f-circum textarea{border-left:3px solid var(--gold)}
+.f-sleep input{border-left:3px solid var(--blue);width:180px}
+.f-apikey input{border-left:3px solid var(--t4)}
+
+/* BUTTONS */
+.btn-p{background:var(--red);color:#fff;border:none;padding:14px 28px;font-family:var(--mono);font-size:12px;letter-spacing:4px;text-transform:uppercase;font-weight:bold;cursor:pointer;border-radius:0;-webkit-appearance:none}
+.btn-p:active{opacity:.8}
+.btn-p:disabled{background:var(--b3);color:var(--t4);cursor:not-allowed}
+.btn-g{background:transparent;color:var(--t4);border:1px solid var(--b3);padding:9px 16px;font-family:var(--mono);font-size:11px;letter-spacing:3px;text-transform:uppercase;cursor:pointer;border-radius:0;-webkit-appearance:none}
+.btn-g:active{opacity:.7}
+.btn-sm{font-size:10px;padding:6px 12px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+
+/* OVERLOAD */
+.overload{background:#1a0800;border:1px solid var(--orange);border-left:4px solid var(--orange);padding:14px 16px;margin-bottom:22px}
+.overload .ot{font-size:11px;letter-spacing:3px;color:var(--orange);margin-bottom:5px}
+.overload .om{font-size:13px;color:#ffaa44;line-height:1.6}
+.overload .oh{font-size:11px;color:var(--t4);margin-top:5px}
+
+/* WAKEUP */
+.wakeup{background:#0a1a0a;border:1px solid var(--green);padding:16px 18px;margin-bottom:22px;display:flex;justify-content:space-between;align-items:center}
+.wakeup .wl{font-size:11px;letter-spacing:3px;color:var(--green);margin-bottom:3px}
+.wakeup .wt{font-size:21px;font-weight:bold;letter-spacing:1px}
+
+/* REMINDER */
+.rem-btn{background:var(--bg3);color:var(--gold);border:1px solid rgba(204,153,51,.2);border-left:3px solid var(--gold);padding:12px 14px;font-family:var(--mono);font-size:11px;letter-spacing:3px;text-transform:uppercase;cursor:pointer;width:100%;display:flex;justify-content:space-between;align-items:center;-webkit-appearance:none;border-radius:0}
+.rem-btn:active{opacity:.7}
+#rem-out{background:#110f00;border:1px solid rgba(204,153,51,.15);border-top:none;padding:13px 15px;font-size:13px;color:#ffcc66;line-height:1.7;display:none}
+
+/* TIMELINE */
+.tl-hdr{font-size:11px;letter-spacing:3px;color:var(--t4);margin-bottom:14px}
+.tl-row{display:flex;margin-bottom:2px;cursor:pointer}
+.tl-time{width:72px;min-width:72px;padding:12px 12px 12px 0;font-size:11px;color:var(--t4);text-align:right;flex-shrink:0;line-height:1.3}
+.tl-conn{display:flex;flex-direction:column;align-items:center;margin-right:12px}
+.tl-dot{width:8px;height:8px;border-radius:50%;margin-top:14px;flex-shrink:0}
+.tl-line{width:1px;flex:1;background:var(--b1);min-height:12px}
+.tl-body{flex:1;padding:10px 12px;border:1px solid transparent;border-left:2px solid var(--b1);transition:all .12s}
+.tl-body.open{border-left-width:2px}
+.tl-task{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.tl-name{font-size:13px;line-height:1.4}
+.tl-dur{font-size:11px;color:var(--t4);white-space:nowrap;margin-top:1px;flex-shrink:0}
+.tl-type{font-size:10px;letter-spacing:2px;margin-top:3px;opacity:.65;text-transform:uppercase}
+.tl-note{font-size:11px;color:#777;margin-top:5px;line-height:1.5}
+
+/* SEC NOTE */
+.sec-note{margin-top:24px;background:var(--bg2);border:1px solid var(--b2);border-left:3px solid var(--blue);padding:16px 18px}
+.sec-note .snl{font-size:11px;letter-spacing:3px;color:var(--blue);margin-bottom:5px}
+.sec-note .snt{font-size:13px;color:#888;line-height:1.7;font-style:italic}
+
+/* HISTORY */
+.hist-card{background:var(--bg2);border:1px solid var(--b1);border-left:3px solid var(--b2);padding:13px 16px;margin-bottom:8px}
+.hc-date{font-size:11px;letter-spacing:3px;color:var(--t4);margin-bottom:4px}
+.hc-wake{font-size:15px;font-weight:bold;color:var(--green)}
+.hc-meta{font-size:11px;color:var(--b3);margin-top:3px}
+.hc-over{font-size:11px;color:#cc5500;margin-top:3px}
+
+/* SETTINGS */
+.set-sec{margin-bottom:32px}
+.set-title{font-size:11px;letter-spacing:3px;color:var(--t4);margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid var(--b1)}
+.set-desc{font-size:13px;color:var(--t3);line-height:1.6;margin-bottom:14px}
+.saved-badge{font-size:11px;color:var(--green);margin-top:8px;display:none}
+.saved-badge.on{display:block}
+
+/* LOADING */
+#loading{display:none;position:fixed;inset:0;background:rgba(8,8,8,.94);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+#loading.on{display:flex}
+.ld-text{font-size:13px;letter-spacing:4px;color:var(--t3)}
+.ld-bar{width:180px;height:2px;background:var(--b2);overflow:hidden;position:relative}
+.ld-bar::after{content:'';position:absolute;top:0;height:100%;width:45%;background:var(--red);animation:sl 1.2s ease-in-out infinite}
+@keyframes sl{0%{left:-45%}100%{left:110%}}
+
+/* TOAST */
+#toast{position:fixed;bottom:calc(24px + var(--safe-bot));left:50%;transform:translateX(-50%);background:#1a1a1a;border:1px solid var(--b3);color:var(--t2);padding:10px 20px;font-size:12px;letter-spacing:2px;z-index:300;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+#toast.on{opacity:1}
+
+/* ONBOARDING */
+#onboard{position:fixed;inset:0;background:var(--bg);z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center}
+#onboard.hide{display:none}
+.ob-title{font-size:24px;font-weight:bold;letter-spacing:3px;margin-bottom:8px}
+.ob-sub{font-size:13px;color:var(--t3);letter-spacing:1px;margin-bottom:40px;line-height:1.6}
+.ob-label{font-size:11px;letter-spacing:3px;color:var(--gold);margin-bottom:10px;text-align:left;width:100%;max-width:360px}
+.ob-input{width:100%;max-width:360px;background:var(--bg3);color:var(--t1);font-family:var(--mono);font-size:14px;padding:14px 16px;border:1px solid var(--b3);border-left:3px solid var(--gold);outline:none;margin-bottom:20px;-webkit-appearance:none;border-radius:0}
+.ob-hint{font-size:11px;color:var(--t4);margin-bottom:28px;text-align:left;width:100%;max-width:360px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<!-- Onboarding (first launch) -->
+<div id="onboard">
+  <div class="ob-title">DAY COMMAND</div>
+  <div class="ob-sub">Your personal AI secretary.<br>Powered by Gemini.</div>
+  <div class="ob-label">GEMINI API KEY</div>
+  <input class="ob-input" type="password" id="ob-key" placeholder="AIza..." autocomplete="off" inputmode="text">
+  <div class="ob-hint">Get a free key at <strong>aistudio.google.com</strong><br>Stored only on this device.</div>
+  <button class="btn-p" onclick="finishOnboard()">▶ GET STARTED</button>
+</div>
+
+<!-- Loading -->
+<div id="loading">
+  <div class="ld-text">▌ SECRETARY THINKING...</div>
+  <div class="ld-bar"></div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Header -->
+<div id="hdr">
+  <div class="hdr-left">
+    <div class="sub">Personal Secretary</div>
+    <div class="main">DAY COMMAND</div>
+  </div>
+  <div class="hdr-right">
+    <div id="clock">--:--:--</div>
+    <div id="dateline">--</div>
+  </div>
+</div>
+
+<!-- Nav -->
+<div id="nav">
+  <button class="ntab on" onclick="goTab('plan',this)">▶ PLAN</button>
+  <button class="ntab" onclick="goTab('schedule',this)">TODAY</button>
+  <button class="ntab" onclick="goTab('history',this)">HISTORY</button>
+  <button class="ntab" onclick="goTab('settings',this)">SETTINGS</button>
+</div>
+
+<!-- Scroll area -->
+<div id="scroll">
+
+  <!-- PLAN -->
+  <div class="page on" id="pg-plan">
+    <div style="margin-bottom:22px;font-size:13px;color:var(--t3);line-height:1.6">
+      Brief me on your day. I'll build the plan.
+    </div>
+
+    <div class="fblock f-goals">
+      <div class="flabel"><span class="lm" style="color:var(--green)">Goals</span><span class="ls">What do you want to achieve?</span></div>
+      <textarea id="i-goals" rows="4" placeholder="Finish the report&#10;Go for a 5km run&#10;Call mom&#10;Read 30 pages"></textarea>
+    </div>
+    <div class="fblock f-commit">
+      <div class="flabel"><span class="lm" style="color:var(--red)">Commitments</span><span class="ls">Fixed — non-negotiables</span></div>
+      <textarea id="i-commit" rows="4" placeholder="9:00 AM — Team standup (30 min)&#10;2:00 PM — Doctor appointment&#10;7:00 PM — Dinner with client"></textarea>
+    </div>
+    <div class="fblock f-circum">
+      <div class="flabel"><span class="lm" style="color:var(--gold)">Circumstances</span><span class="ls">Constraints, energy, context</span></div>
+      <textarea id="i-circum" rows="3" placeholder="Slept badly, low energy&#10;Working from home&#10;Kids drop-off at 8:30 AM"></textarea>
+    </div>
+    <div class="fblock f-sleep">
+      <div class="flabel"><span class="lm" style="color:var(--blue)">Sleep Target</span><span class="ls">Bedtime?</span></div>
+      <input type="text" id="i-sleep" placeholder="e.g. 11:00 PM">
+    </div>
+
+    <div class="row">
+      <button class="btn-p" id="btn-build" onclick="buildPlan()">▶ BUILD MY DAY</button>
+      <button class="btn-g" onclick="clearInputs()">CLEAR</button>
+      <span id="autosave-dot" style="font-size:10px;color:var(--b3);letter-spacing:1px">✓ saved</span>
+    </div>
+  </div>
+
+  <!-- SCHEDULE -->
+  <div class="page" id="pg-schedule">
+    <div id="sch-empty" style="padding:60px 0;text-align:center;color:var(--t4);font-size:13px">
+      No schedule yet — go to PLAN.
+    </div>
+    <div id="sch-content" style="display:none">
+      <div class="overload" id="ov-box" style="display:none">
+        <div class="ot">⚠ DAY OVERLOADED</div>
+        <div class="om" id="ov-msg"></div>
+        <div class="oh" id="ov-hrs"></div>
+      </div>
+      <div class="wakeup">
+        <div>
+          <div class="wl">SECRETARY ORDERS</div>
+          <div class="wt" id="wake-time">—</div>
+        </div>
+        <div style="font-size:26px">⏰</div>
+      </div>
+      <div style="margin-bottom:22px">
+        <button class="rem-btn" id="rem-btn" onclick="getReminder()">
+          <span id="rem-txt">▶ WHAT SHOULD I DO RIGHT NOW?</span>
+          <span id="rem-clock" style="font-size:11px;color:var(--t4)"></span>
+        </button>
+        <div id="rem-out"></div>
+      </div>
+      <div class="tl-hdr" id="tl-hdr">SCHEDULE</div>
+      <div id="timeline"></div>
+      <div class="sec-note" id="sec-note" style="display:none">
+        <div class="snl">SECRETARY'S NOTE</div>
+        <div class="snt" id="sec-txt"></div>
+      </div>
+      <div class="row" style="margin-top:24px">
+        <button class="btn-g" onclick="goTab('plan',document.querySelector('.ntab'))">← NEW DAY</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="page" id="pg-history">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="font-size:11px;letter-spacing:3px;color:var(--t4)" id="hist-count">PAST DAYS</div>
+      <button class="btn-g btn-sm" onclick="clearHistory()">CLEAR ALL</button>
+    </div>
+    <div id="hist-list"></div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="page" id="pg-settings">
+    <div class="set-sec">
+      <div class="set-title">GEMINI API KEY</div>
+      <div class="set-desc">Stored only on this device. Used only to call Google's Gemini API directly from your phone.</div>
+      <div class="fblock f-apikey">
+        <input type="password" id="s-key" placeholder="AIza..." autocomplete="off">
+      </div>
+      <div class="row">
+        <button class="btn-p" onclick="saveKey()">SAVE KEY</button>
+        <button class="btn-g" onclick="removeKey()">REMOVE</button>
+      </div>
+      <div class="saved-badge" id="key-badge">✓ API key saved on this device</div>
+    </div>
+    <div class="set-sec">
+      <div class="set-title">STORAGE</div>
+      <div class="set-desc" id="storage-info">—</div>
+    </div>
+    <div class="set-sec">
+      <div class="set-title">INSTALL AS APP</div>
+      <div class="set-desc">In Chrome: tap the menu (⋮) → <strong>Add to Home screen</strong>. The app will appear on your home screen like any other app, works offline.</div>
+    </div>
+  </div>
+
+</div><!-- /scroll -->
+
+<script>
+// ── PROMPTS ──
+const SYS = `You are a sharp, no-nonsense personal secretary AI. Analyze someone's day and act like a real executive assistant.
+
+Build a realistic daily schedule. If the day is overloaded (too much for available hours), warn clearly.
+Account for travel, prep time, energy levels, meals, and transitions.
+
+Respond ONLY with valid JSON — no markdown, no explanation, nothing else:
+{
+  "overloaded": false,
+  "overload_warning": "",
+  "wake_up_time": "6:30 AM",
+  "schedule": [
+    { "time": "6:30 AM", "task": "Wake up", "type": "routine", "duration": "15 min", "note": "" }
+  ],
+  "secretary_note": "One sharp piece of advice for today.",
+  "total_hours_needed": 14.5,
+  "available_hours": 16
+}
+Types: routine, commitment, goal, break, travel, warning`;
+
+const REM_SYS = `You are a sharp personal secretary. Given the schedule and current time, tell the user exactly what they should be doing RIGHT NOW — on time, behind, or ahead? 2-3 sentences, direct and motivating.`;
+
+const TYPE_C = {
+  routine:    {bg:'#1a1a2e',border:'#4a4a8a',dot:'#7878cc'},
+  commitment: {bg:'#1a0a0a',border:'#8a2a2a',dot:'#cc4444'},
+  goal:       {bg:'#0a1a0a',border:'#2a7a2a',dot:'#44aa44'},
+  break:      {bg:'#1a1a1a',border:'#555',dot:'#999'},
+  travel:     {bg:'#1a140a',border:'#7a5a1a',dot:'#cc9933'},
+  warning:    {bg:'#1a0f00',border:'#aa6600',dot:'#ffaa00'},
+};
+
+// ── STATE ──
+let currentRecord = null;
+let history = [];
+let expanded = new Set();
+let draftTimer = null;
+
+// ── STORAGE (localStorage — works on device) ──
+function lsGet(k){ try{return localStorage.getItem(k)}catch(e){return null} }
+function lsSet(k,v){ try{localStorage.setItem(k,v)}catch(e){} }
+function lsDel(k){ try{localStorage.removeItem(k)}catch(e){} }
+
+function getKey(){ return lsGet('dc_gemini_key')||'' }
+function saveKey(){
+  const v = document.getElementById('s-key').value.trim();
+  if(!v){toast('Enter a key first');return}
+  lsSet('dc_gemini_key', v);
+  document.getElementById('key-badge').classList.add('on');
+  toast('✓ API key saved');
+}
+function removeKey(){
+  lsDel('dc_gemini_key');
+  document.getElementById('s-key').value='';
+  document.getElementById('key-badge').classList.remove('on');
+  toast('Key removed');
+}
+
+// ── CLOCK ──
+function tick(){
+  const n=new Date();
+  document.getElementById('clock').textContent=n.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  document.getElementById('dateline').textContent=n.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  const rc=document.getElementById('rem-clock');
+  if(rc) rc.textContent=n.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+}
+setInterval(tick,1000); tick();
+
+// ── TOAST ──
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('on');
+  setTimeout(()=>t.classList.remove('on'),2200);
+}
+
+// ── TABS ──
+function goTab(name, btn){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.ntab').forEach(b=>b.classList.remove('on'));
+  document.getElementById('pg-'+name).classList.add('on');
+  // find the right tab button
+  const tabs=['plan','schedule','history','settings'];
+  document.querySelectorAll('.ntab')[tabs.indexOf(name)].classList.add('on');
+  document.getElementById('scroll').scrollTop=0;
+  if(name==='history') renderHistory();
+  if(name==='settings') renderSettings();
+}
+
+// ── ONBOARDING ──
+function finishOnboard(){
+  const v=document.getElementById('ob-key').value.trim();
+  if(!v||!v.startsWith('AIza')){toast('Enter a valid Gemini API key (starts with AIza)');return}
+  lsSet('dc_gemini_key',v);
+  document.getElementById('onboard').classList.add('hide');
+  toast('✓ Welcome to Day Command');
+}
+
+// ── DRAFT AUTO-SAVE ──
+function scheduleDraftSave(){
+  clearTimeout(draftTimer);
+  draftTimer=setTimeout(()=>{
+    lsSet('dc_draft', JSON.stringify({
+      goals: document.getElementById('i-goals').value,
+      commitments: document.getElementById('i-commit').value,
+      circumstances: document.getElementById('i-circum').value,
+      sleep: document.getElementById('i-sleep').value,
+    }));
+  }, 600);
+}
+['i-goals','i-commit','i-circum','i-sleep'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', scheduleDraftSave);
+});
+
+function loadDraft(){
+  const d=lsGet('dc_draft');
+  if(!d) return;
+  try{
+    const p=JSON.parse(d);
+    document.getElementById('i-goals').value=p.goals||'';
+    document.getElementById('i-commit').value=p.commitments||'';
+    document.getElementById('i-circum').value=p.circumstances||'';
+    document.getElementById('i-sleep').value=p.sleep||'';
+  }catch(e){}
+}
+
+function clearInputs(){
+  ['i-goals','i-commit','i-circum','i-sleep'].forEach(id=>document.getElementById(id).value='');
+  lsDel('dc_draft');
+  toast('Cleared');
+}
+
+// ── BUILD PLAN (Gemini) ──
+async function buildPlan(){
+  const goals=document.getElementById('i-goals').value.trim();
+  const commitments=document.getElementById('i-commit').value.trim();
+  if(!goals&&!commitments){toast('Add at least some goals or commitments');return}
+  const key=getKey();
+  if(!key){toast('No API key — go to Settings');goTab('settings');return}
+
+  const now=new Date();
+  const circumstances=document.getElementById('i-circum').value.trim();
+  const sleep=document.getElementById('i-sleep').value.trim();
+
+  const prompt=`${SYS}
+
+Today is ${now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}, current time: ${now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}.
+
+MY GOALS FOR TODAY:
+${goals||'None'}
+
+MY COMMITMENTS (fixed appointments):
+${commitments||'None'}
+
+MY CIRCUMSTANCES:
+${circumstances||'None'}
+
+${sleep?'Sleep target: '+sleep:''}
+
+Build my day plan. Respond ONLY with the JSON object.`;
+
+  document.getElementById('loading').classList.add('on');
+  document.getElementById('btn-build').disabled=true;
+
+  try{
+    const res=await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+      {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          contents:[{parts:[{text:prompt}]}],
+          generationConfig:{temperature:0.7,maxOutputTokens:2000}
+        })
+      }
+    );
+    const data=await res.json();
+    if(data.error) throw new Error(data.error.message);
+    const raw=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    const clean=raw.replace(/```json|```/g,'').trim();
+    const parsed=JSON.parse(clean);
+    const record={
+      date:now.toISOString(),
+      dateLabel:now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}),
+      inputs:{goals,commitments,circumstances,sleep},
+      schedule:parsed,
+    };
+    currentRecord=record;
+    lsSet('dc_current', JSON.stringify(record));
+    const h=[record,...history].slice(0,30);
+    history=h;
+    lsSet('dc_history', JSON.stringify(h));
+    expanded=new Set();
+    renderSchedule(parsed);
+    goTab('schedule');
+  }catch(e){
+    toast('Error: '+e.message);
+    console.error(e);
+  }finally{
+    document.getElementById('loading').classList.remove('on');
+    document.getElementById('btn-build').disabled=false;
+  }
+}
+
+// ── RENDER SCHEDULE ──
+function renderSchedule(data){
+  document.getElementById('sch-empty').style.display='none';
+  document.getElementById('sch-content').style.display='block';
+
+  const ov=document.getElementById('ov-box');
+  if(data.overloaded){
+    ov.style.display='block';
+    document.getElementById('ov-msg').textContent=data.overload_warning||'';
+    document.getElementById('ov-hrs').textContent=
+      data.total_hours_needed?`Needed: ${data.total_hours_needed}h — Available: ${data.available_hours}h`:'';
+  } else { ov.style.display='none'; }
+
+  document.getElementById('wake-time').textContent='Wake up at '+(data.wake_up_time||'—');
+  document.getElementById('rem-out').style.display='none';
+  document.getElementById('rem-out').textContent='';
+  document.getElementById('rem-txt').textContent='▶ WHAT SHOULD I DO RIGHT NOW?';
+
+  const items=data.schedule||[];
+  document.getElementById('tl-hdr').textContent=`TODAY'S SCHEDULE — ${items.length} BLOCKS`;
+
+  const tl=document.getElementById('timeline');
+  tl.innerHTML='';
+  items.forEach((item,i)=>{
+    const c=TYPE_C[item.type]||TYPE_C.routine;
+    const row=document.createElement('div');
+    row.className='tl-row';
+    row.onclick=()=>toggleItem(i,c,item);
+    row.innerHTML=`
+      <div class="tl-time">${esc(item.time)}</div>
+      <div class="tl-conn">
+        <div class="tl-dot" style="background:${c.dot}"></div>
+        ${i<items.length-1?'<div class="tl-line"></div>':''}
+      </div>
+      <div class="tl-body" id="tlb-${i}" style="border-left-color:${c.dot}22">
+        <div class="tl-task">
+          <div class="tl-name">${esc(item.task)}</div>
+          <div class="tl-dur">${esc(item.duration||'')}</div>
+        </div>
+        <div class="tl-type" style="color:${c.dot}">${esc(item.type||'')}</div>
+        ${item.note?`<div class="tl-note" id="tln-${i}" style="display:none">↳ ${esc(item.note)}</div>`:''}
+      </div>`;
+    tl.appendChild(row);
+  });
+
+  const sn=document.getElementById('sec-note');
+  if(data.secretary_note){
+    sn.style.display='block';
+    document.getElementById('sec-txt').textContent=`"${data.secretary_note}"`;
+  } else { sn.style.display='none'; }
+}
+
+function toggleItem(i,c,item){
+  const body=document.getElementById('tlb-'+i);
+  const note=document.getElementById('tln-'+i);
+  if(!body) return;
+  if(expanded.has(i)){
+    expanded.delete(i);
+    body.style.background='transparent';
+    body.style.borderColor='transparent';
+    body.style.borderLeftColor=c.dot+'22';
+    if(note) note.style.display='none';
+  } else {
+    expanded.add(i);
+    body.style.background=c.bg;
+    body.style.borderColor=c.border;
+    body.style.borderLeftColor=c.dot;
+    if(note) note.style.display='block';
+  }
+}
+
+// ── REMINDER (Gemini) ──
+async function getReminder(){
+  const key=getKey();
+  if(!key){toast('No API key — go to Settings');return}
+  if(!currentRecord) return;
+  const btn=document.getElementById('rem-btn');
+  btn.disabled=true;
+  document.getElementById('rem-txt').textContent='▌ CHECKING...';
+  document.getElementById('rem-out').style.display='none';
+
+  const now=new Date();
+  const lines=(currentRecord.schedule.schedule||[]).map(s=>`${s.time} — ${s.task} (${s.duration})`).join('\n');
+  const prompt=`${REM_SYS}\n\nCurrent time: ${now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})} on ${now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}.\n\nSchedule:\n${lines}\n\nWhat should I be doing RIGHT NOW?`;
+
+  try{
+    const res=await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.7,maxOutputTokens:300}})}
+    );
+    const data=await res.json();
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'No response.';
+    document.getElementById('rem-out').textContent=text;
+    document.getElementById('rem-out').style.display='block';
+  }catch(e){
+    document.getElementById('rem-out').textContent='Could not reach secretary.';
+    document.getElementById('rem-out').style.display='block';
+  }finally{
+    btn.disabled=false;
+    document.getElementById('rem-txt').textContent='▶ WHAT SHOULD I DO RIGHT NOW?';
+  }
+}
+
+// ── HISTORY ──
+function renderHistory(){
+  const list=document.getElementById('hist-list');
+  document.getElementById('hist-count').textContent=`PAST DAYS — ${history.length} SAVED`;
+  if(!history.length){
+    list.innerHTML='<div style="padding:50px 0;text-align:center;color:var(--t4);font-size:13px">No history yet.</div>';
+    return;
+  }
+  list.innerHTML=history.map((r,i)=>`
+    <div class="hist-card">
+      <div class="hc-date">${esc(r.dateLabel||r.date)}</div>
+      <div class="hc-wake">⏰ ${esc(r.schedule.wake_up_time||'—')}</div>
+      <div class="hc-meta">${(r.schedule.schedule||[]).length} blocks</div>
+      ${r.schedule.overloaded?'<div class="hc-over">⚠ Overloaded day</div>':''}
+      <div class="row" style="margin-top:10px">
+        <button class="btn-g btn-sm" onclick="viewHistory(${i})">VIEW</button>
+        <button class="btn-g btn-sm" onclick="replan(${i})">REPLAN</button>
+      </div>
+    </div>`).join('');
+}
+
+function viewHistory(i){
+  if(!history[i]) return;
+  currentRecord=history[i];
+  expanded=new Set();
+  renderSchedule(history[i].schedule);
+  goTab('schedule');
+}
+
+function replan(i){
+  if(!history[i]) return;
+  const inp=history[i].inputs||{};
+  document.getElementById('i-goals').value=inp.goals||'';
+  document.getElementById('i-commit').value=inp.commitments||'';
+  document.getElementById('i-circum').value=inp.circumstances||'';
+  document.getElementById('i-sleep').value=inp.sleep||'';
+  goTab('plan');
+}
+
+function clearHistory(){
+  if(!confirm('Delete all history?')) return;
+  history=[];
+  lsDel('dc_history');
+  renderHistory();
+  toast('History cleared');
+}
+
+// ── SETTINGS ──
+function renderSettings(){
+  const k=getKey();
+  if(k){ document.getElementById('s-key').value=k; document.getElementById('key-badge').classList.add('on'); }
+  const h=history.length;
+  const hasCur=!!lsGet('dc_current');
+  const hasDraft=!!lsGet('dc_draft');
+  document.getElementById('storage-info').textContent=
+    `${h} days in history · ${hasCur?'1 schedule saved':'no current schedule'} · draft: ${hasDraft?'saved':'empty'}`;
+}
+
+// ── UTILS ──
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+// ── INIT ──
+(function init(){
+  // Check if first launch
+  if(!getKey()){
+    document.getElementById('onboard').classList.remove('hide');
+  } else {
+    document.getElementById('onboard').classList.add('hide');
+  }
+
+  loadDraft();
+
+  // Load history
+  try{ history=JSON.parse(lsGet('dc_history')||'[]') }catch(e){ history=[] }
+
+  // Load current schedule
+  try{
+    const cur=lsGet('dc_current');
+    if(cur){
+      currentRecord=JSON.parse(cur);
+      renderSchedule(currentRecord.schedule);
+    }
+  }catch(e){}
+
+  // Register service worker
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  }
+})();
+</script>
+</body>
+</html>
