@@ -146,10 +146,10 @@ textarea:focus,input:focus{border-color:rgba(255,255,255,0.1)}
 <!-- Onboarding (first launch) -->
 <div id="onboard">
   <div class="ob-title">DAY COMMAND</div>
-  <div class="ob-sub">Your personal AI secretary.<br>Powered by Gemini.</div>
-  <div class="ob-label">GEMINI API KEY</div>
-  <input class="ob-input" type="password" id="ob-key" placeholder="AIza..." autocomplete="off" inputmode="text">
-  <div class="ob-hint">Get a free key at <strong>aistudio.google.com</strong><br>Stored only on this device.</div>
+  <div class="ob-sub">Your personal AI secretary.<br>Powered by Groq.</div>
+  <div class="ob-label">GROQ API KEY</div>
+  <input class="ob-input" type="password" id="ob-key" placeholder="gsk_..." autocomplete="off" inputmode="text">
+  <div class="ob-hint">Get a free key at <strong>console.groq.com</strong><br>Free — 14,400 requests/day. Stored only on this device.</div>
   <button class="btn-p" onclick="finishOnboard()">▶ GET STARTED</button>
 </div>
 
@@ -264,10 +264,10 @@ textarea:focus,input:focus{border-color:rgba(255,255,255,0.1)}
   <!-- SETTINGS -->
   <div class="page" id="pg-settings">
     <div class="set-sec">
-      <div class="set-title">GEMINI API KEY</div>
-      <div class="set-desc">Stored only on this device. Used only to call Google's Gemini API directly from your phone.</div>
+      <div class="set-title">GROQ API KEY</div>
+      <div class="set-desc">Stored only on this device. Free tier gives you 14,400 requests/day — more than enough. Get yours at <strong>console.groq.com</strong>.</div>
       <div class="fblock f-apikey">
-        <input type="password" id="s-key" placeholder="AIza..." autocomplete="off">
+        <input type="password" id="s-key" placeholder="gsk_..." autocomplete="off">
       </div>
       <div class="row">
         <button class="btn-p" onclick="saveKey()">SAVE KEY</button>
@@ -330,16 +330,16 @@ function lsGet(k){ try{return localStorage.getItem(k)}catch(e){return null} }
 function lsSet(k,v){ try{localStorage.setItem(k,v)}catch(e){} }
 function lsDel(k){ try{localStorage.removeItem(k)}catch(e){} }
 
-function getKey(){ return lsGet('dc_gemini_key')||'' }
+function getKey(){ return lsGet('dc_groq_key')||'' }
 function saveKey(){
   const v = document.getElementById('s-key').value.trim();
   if(!v){toast('Enter a key first');return}
-  lsSet('dc_gemini_key', v);
+  lsSet('dc_groq_key', v);
   document.getElementById('key-badge').classList.add('on');
   toast('✓ API key saved');
 }
 function removeKey(){
-  lsDel('dc_gemini_key');
+  lsDel('dc_groq_key');
   document.getElementById('s-key').value='';
   document.getElementById('key-badge').classList.remove('on');
   toast('Key removed');
@@ -378,8 +378,8 @@ function goTab(name, btn){
 // ── ONBOARDING ──
 function finishOnboard(){
   const v=document.getElementById('ob-key').value.trim();
-  if(!v||!v.startsWith('AIza')){toast('Enter a valid Gemini API key (starts with AIza)');return}
-  lsSet('dc_gemini_key',v);
+  if(!v||!v.startsWith('gsk_')){toast('Enter a valid Groq API key (starts with gsk_)');return}
+  lsSet('dc_groq_key',v);
   document.getElementById('onboard').classList.add('hide');
   toast('✓ Welcome to Day Command');
 }
@@ -418,7 +418,7 @@ function clearInputs(){
   toast('Cleared');
 }
 
-// ── BUILD PLAN (Gemini) ──
+// ── BUILD PLAN (Groq) ──
 async function buildPlan(){
   const goals=document.getElementById('i-goals').value.trim();
   const commitments=document.getElementById('i-commit').value.trim();
@@ -451,20 +451,21 @@ Build my day plan. Respond ONLY with the JSON object.`;
   document.getElementById('btn-build').disabled=true;
 
   try{
-    const res=await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+    const res=await fetch('https://api.groq.com/openai/v1/chat/completions',
       {
         method:'POST',
-        headers:{'Content-Type':'application/json'},
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
         body:JSON.stringify({
-          contents:[{parts:[{text:prompt}]}],
-          generationConfig:{temperature:0.7,maxOutputTokens:2000}
+          model:'llama-3.3-70b-versatile',
+          messages:[{role:'user',content:prompt}],
+          temperature:0.7,
+          max_tokens:2000
         })
       }
     );
     const data=await res.json();
     if(data.error) throw new Error(data.error.message);
-    const raw=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    const raw=data.choices?.[0]?.message?.content||'';
     const clean=raw.replace(/```json|```/g,'').trim();
     const parsed=JSON.parse(clean);
     const record={
@@ -561,7 +562,7 @@ function toggleItem(i,c,item){
   }
 }
 
-// ── REMINDER (Gemini) ──
+// ── REMINDER (Groq) ──
 async function getReminder(){
   const key=getKey();
   if(!key){toast('No API key — go to Settings');return}
@@ -576,12 +577,11 @@ async function getReminder(){
   const prompt=`${REM_SYS}\n\nCurrent time: ${now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})} on ${now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}.\n\nSchedule:\n${lines}\n\nWhat should I be doing RIGHT NOW?`;
 
   try{
-    const res=await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
-      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.7,maxOutputTokens:300}})}
+    const res=await fetch('https://api.groq.com/openai/v1/chat/completions',
+      {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],temperature:0.7,max_tokens:300})}
     );
     const data=await res.json();
-    const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'No response.';
+    const text=data.choices?.[0]?.message?.content||'No response.';
     document.getElementById('rem-out').textContent=text;
     document.getElementById('rem-out').style.display='block';
   }catch(e){
