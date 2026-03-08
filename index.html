@@ -456,10 +456,33 @@ Build my day plan. Respond ONLY with the JSON object.`;
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
         body:JSON.stringify({
-          model:'llama-3.3-70b-versatile',
-          messages:[{role:'user',content:prompt}],
-          temperature:0.7,
-          max_tokens:2000
+          model:'moonshotai/kimi-k2-instruct',
+          messages:[
+            {role:'system',content:'You are a sharp personal secretary AI. You MUST respond only with a valid JSON object matching the exact schema provided. No explanation, no markdown.'},
+            {role:'user',content:prompt}
+          ],
+          temperature:0.6,
+          max_tokens:2000,
+          response_format:{
+            type:'json_schema',
+            json_schema:{
+              name:'day_plan',
+              strict:false,
+              schema:{
+                type:'object',
+                properties:{
+                  overloaded:{type:'boolean'},
+                  overload_warning:{type:'string'},
+                  wake_up_time:{type:'string'},
+                  schedule:{type:'array',items:{type:'object',properties:{time:{type:'string'},task:{type:'string'},type:{type:'string'},duration:{type:'string'},note:{type:'string'}},required:['time','task','type','duration','note']}},
+                  secretary_note:{type:'string'},
+                  total_hours_needed:{type:'number'},
+                  available_hours:{type:'number'}
+                },
+                required:['overloaded','overload_warning','wake_up_time','schedule','secretary_note']
+              }
+            }
+          }
         })
       }
     );
@@ -578,7 +601,7 @@ async function getReminder(){
 
   try{
     const res=await fetch('https://api.groq.com/openai/v1/chat/completions',
-      {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model:'llama-3.3-70b-versatile',messages:[{role:'user',content:prompt}],temperature:0.7,max_tokens:300})}
+      {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model:'moonshotai/kimi-k2-instruct',messages:[{role:'system',content:REM_SYS},{role:'user',content:prompt}],temperature:0.6,max_tokens:300})}
     );
     const data=await res.json();
     const text=data.choices?.[0]?.message?.content||'No response.';
