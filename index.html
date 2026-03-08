@@ -100,7 +100,29 @@ textarea:focus,input:focus{border-color:rgba(255,255,255,0.1)}
 .tl-type{font-size:10px;letter-spacing:2px;margin-top:3px;opacity:.65;text-transform:uppercase}
 .tl-note{font-size:11px;color:#777;margin-top:5px;line-height:1.5}
 
-/* SEC NOTE */
+/* CHECKBOX */
+.tl-check{width:20px;min-width:20px;height:20px;border:2px solid var(--b3);border-radius:3px;margin-top:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;-webkit-tap-highlight-color:transparent}
+.tl-check.done{background:var(--green);border-color:var(--green)}
+.tl-check.done::after{content:'✓';font-size:12px;color:#fff;font-weight:bold}
+.tl-body.done-task{opacity:.45}
+.tl-body.done-task .tl-name{text-decoration:line-through;color:var(--t4)}
+
+/* EARLY FINISH POPUP */
+#early-popup{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:2px solid var(--green);padding:18px 20px calc(18px + var(--safe-bot));z-index:150;animation:slideUp .25s ease}
+#early-popup.on{display:block}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.ep-label{font-size:10px;letter-spacing:3px;color:var(--green);margin-bottom:6px;text-transform:uppercase}
+.ep-msg{font-size:14px;color:var(--t1);line-height:1.5;margin-bottom:14px}
+.ep-saved{font-size:12px;color:var(--green);font-weight:bold;margin-bottom:14px}
+.ep-btns{display:flex;gap:10px}
+.ep-btn{flex:1;padding:12px 8px;font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;border:none;cursor:pointer;font-weight:bold;-webkit-appearance:none;border-radius:0}
+.ep-btn.pull{background:var(--red);color:#fff}
+.ep-btn.rest{background:var(--b2);color:var(--t2);border:1px solid var(--b3)}
+
+/* PROGRESS BAR */
+#progress-bar{height:3px;background:var(--b1);margin-bottom:16px;position:relative}
+#progress-fill{height:100%;background:var(--green);transition:width .4s ease}
+#progress-label{font-size:10px;letter-spacing:2px;color:var(--t4);text-align:right;margin-top:4px;margin-bottom:14px}
 .sec-note{margin-top:24px;background:var(--bg2);border:1px solid var(--b2);border-left:3px solid var(--blue);padding:16px 18px}
 .sec-note .snl{font-size:11px;letter-spacing:3px;color:var(--blue);margin-bottom:5px}
 .sec-note .snt{font-size:13px;color:#888;line-height:1.7;font-style:italic}
@@ -240,6 +262,8 @@ textarea:focus,input:focus{border-color:rgba(255,255,255,0.1)}
         </button>
         <div id="rem-out"></div>
       </div>
+      <div id="progress-bar"><div id="progress-fill" style="width:0%"></div></div>
+      <div id="progress-label">0 of 0 done</div>
       <div class="tl-hdr" id="tl-hdr">SCHEDULE</div>
       <div id="timeline"></div>
       <div class="sec-note" id="sec-note" style="display:none">
@@ -287,6 +311,17 @@ textarea:focus,input:focus{border-color:rgba(255,255,255,0.1)}
 
 </div><!-- /scroll -->
 
+<!-- Early finish popup -->
+<div id="early-popup">
+  <div class="ep-label">▶ TASK DONE EARLY</div>
+  <div class="ep-msg" id="ep-msg"></div>
+  <div class="ep-saved" id="ep-saved"></div>
+  <div class="ep-btns">
+    <button class="ep-btn pull" onclick="pullForward()">PULL NEXT TASK</button>
+    <button class="ep-btn rest" onclick="restTillNext()">REST TILL ORIGINAL TIME</button>
+  </div>
+</div>
+
 <script>
 // ── PROMPTS ──
 const SYS = `You are a sharp, no-nonsense personal secretary AI. Analyze someone's day and act like a real executive assistant.
@@ -308,7 +343,7 @@ Respond ONLY with valid JSON — no markdown, no explanation, nothing else:
 }
 Types: routine, commitment, goal, break, travel, warning`;
 
-const REM_SYS = `You are a sharp personal secretary. Given the schedule and current time, tell the user exactly what they should be doing RIGHT NOW — on time, behind, or ahead? 2-3 sentences, direct and motivating.`;
+const REM_SYS = `You are a sharp personal secretary. Given the schedule and current time, tell the user exactly what they should be doing RIGHT NOW. Tasks marked ✓ DONE are already completed — ignore them completely. Focus only on PENDING tasks. Tell them which pending task to tackle now, whether they're ahead or behind, and be direct and motivating. 2-3 sentences max.`;
 
 const TYPE_C = {
   routine:    {bg:'#1a1a2e',border:'#4a4a8a',dot:'#7878cc'},
@@ -323,7 +358,9 @@ const TYPE_C = {
 let currentRecord = null;
 let history = [];
 let expanded = new Set();
+let checked = new Set();
 let draftTimer = null;
+let earlyFinishIndex = -1;
 
 // ── STORAGE (localStorage — works on device) ──
 function lsGet(k){ try{return localStorage.getItem(k)}catch(e){return null} }
@@ -503,6 +540,7 @@ Build my day plan. Respond ONLY with the JSON object.`;
     history=h;
     lsSet('dc_history', JSON.stringify(h));
     expanded=new Set();
+    checked=new Set();
     renderSchedule(parsed);
     goTab('schedule');
   }catch(e){
@@ -534,28 +572,50 @@ function renderSchedule(data){
 
   const items=data.schedule||[];
   document.getElementById('tl-hdr').textContent=`TODAY'S SCHEDULE — ${items.length} BLOCKS`;
+  updateProgress(items);
 
   const tl=document.getElementById('timeline');
   tl.innerHTML='';
   items.forEach((item,i)=>{
     const c=TYPE_C[item.type]||TYPE_C.routine;
+    const isDone=checked.has(i);
     const row=document.createElement('div');
     row.className='tl-row';
-    row.onclick=()=>toggleItem(i,c,item);
+    row.style.alignItems='flex-start';
+
+    // Checkbox
+    const chk=document.createElement('div');
+    chk.className='tl-check'+(isDone?' done':'');
+    chk.style.marginRight='10px';
+    chk.onclick=(e)=>{e.stopPropagation();toggleCheck(i,items);}
+
     row.innerHTML=`
       <div class="tl-time">${esc(item.time)}</div>
       <div class="tl-conn">
-        <div class="tl-dot" style="background:${c.dot}"></div>
+        <div class="tl-dot" style="background:${isDone?'#2a5a2a':c.dot}"></div>
         ${i<items.length-1?'<div class="tl-line"></div>':''}
-      </div>
-      <div class="tl-body" id="tlb-${i}" style="border-left-color:${c.dot}22">
-        <div class="tl-task">
-          <div class="tl-name">${esc(item.task)}</div>
-          <div class="tl-dur">${esc(item.duration||'')}</div>
-        </div>
-        <div class="tl-type" style="color:${c.dot}">${esc(item.type||'')}</div>
-        ${item.note?`<div class="tl-note" id="tln-${i}" style="display:none">↳ ${esc(item.note)}</div>`:''}
       </div>`;
+
+    const body=document.createElement('div');
+    body.className='tl-body'+(isDone?' done-task':'');
+    body.id='tlb-'+i;
+    body.style.borderLeftColor=isDone?'#2a5a2a33':c.dot+'22';
+    body.style.flex='1';
+    body.onclick=()=>toggleItem(i,c,item);
+    body.innerHTML=`
+      <div class="tl-task">
+        <div style="display:flex;align-items:flex-start;gap:10px;flex:1">
+          <div class="tl-check${isDone?' done':''}" id="chk-${i}" onclick="event.stopPropagation();toggleCheck(${i},currentRecord.schedule.schedule)" style="margin-top:0;flex-shrink:0"></div>
+          <div style="flex:1">
+            <div class="tl-name">${esc(item.task)}</div>
+            <div class="tl-type" style="color:${isDone?'#444':c.dot}">${esc(item.type||'')}</div>
+            ${item.note?`<div class="tl-note" id="tln-${i}" style="display:none">↳ ${esc(item.note)}</div>`:''}
+          </div>
+        </div>
+        <div class="tl-dur">${esc(item.duration||'')}</div>
+      </div>`;
+
+    row.appendChild(body);
     tl.appendChild(row);
   });
 
@@ -566,21 +626,99 @@ function renderSchedule(data){
   } else { sn.style.display='none'; }
 }
 
+function updateProgress(items){
+  const total=items.length;
+  const done=checked.size;
+  const pct=total?Math.round(done/total*100):0;
+  document.getElementById('progress-fill').style.width=pct+'%';
+  document.getElementById('progress-label').textContent=`${done} of ${total} done · ${pct}%`;
+}
+
+// ── CHECKBOX LOGIC ──
+function toggleCheck(i, items){
+  if(checked.has(i)){
+    checked.delete(i);
+    hideEarlyPopup();
+    renderSchedule(currentRecord.schedule);
+    return;
+  }
+  checked.add(i);
+  renderSchedule(currentRecord.schedule);
+
+  // Check if finished early
+  const now=new Date();
+  const item=items[i];
+  const nextItem=items[i+1];
+  if(!nextItem) return; // last task, no popup needed
+
+  // Parse scheduled end time of completed task
+  const scheduledEnd=parseTimeToMinutes(item.time)+parseDuration(item.duration);
+  const nowMinutes=now.getHours()*60+now.getMinutes();
+  const minutesSaved=scheduledEnd-nowMinutes;
+
+  if(minutesSaved>2){
+    earlyFinishIndex=i;
+    const nextTime=parseTimeToMinutes(nextItem.time);
+    const freeTime=nextTime-nowMinutes;
+    document.getElementById('ep-saved').textContent=`⚡ You saved ${minutesSaved} minutes!`;
+    document.getElementById('ep-msg').textContent=
+      `"${item.task}" done early. Next task "${nextItem.task}" starts at ${nextItem.time}` +
+      (freeTime>0?` — you have ${freeTime} min free.`:` — it was supposed to start already.`);
+    document.getElementById('early-popup').classList.add('on');
+  }
+}
+
+function parseTimeToMinutes(timeStr){
+  if(!timeStr) return 0;
+  const m=timeStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+  if(!m) return 0;
+  let h=parseInt(m[1]), min=parseInt(m[2]);
+  const ap=(m[3]||'').toUpperCase();
+  if(ap==='PM'&&h!==12) h+=12;
+  if(ap==='AM'&&h===12) h=0;
+  return h*60+min;
+}
+
+function parseDuration(dur){
+  if(!dur) return 0;
+  let total=0;
+  const h=dur.match(/(\d+)\s*h/i);
+  const m=dur.match(/(\d+)\s*min/i);
+  if(h) total+=parseInt(h[1])*60;
+  if(m) total+=parseInt(m[1]);
+  return total;
+}
+
+function hideEarlyPopup(){
+  document.getElementById('early-popup').classList.remove('on');
+  earlyFinishIndex=-1;
+}
+
+function pullForward(){
+  hideEarlyPopup();
+  toast('▶ Pull forward — get on to the next task now!');
+}
+
+function restTillNext(){
+  hideEarlyPopup();
+  if(earlyFinishIndex<0||!currentRecord) return;
+  const items=currentRecord.schedule.schedule;
+  const nextItem=items[earlyFinishIndex+1];
+  if(!nextItem){toast('No next task found');return;}
+  toast(`Rest until ${nextItem.time} — you earned it.`);
+}
+
 function toggleItem(i,c,item){
   const body=document.getElementById('tlb-'+i);
   const note=document.getElementById('tln-'+i);
   if(!body) return;
   if(expanded.has(i)){
     expanded.delete(i);
-    body.style.background='transparent';
-    body.style.borderColor='transparent';
-    body.style.borderLeftColor=c.dot+'22';
+    if(!checked.has(i)){body.style.background='transparent';body.style.borderColor='transparent';body.style.borderLeftColor=c.dot+'22';}
     if(note) note.style.display='none';
   } else {
     expanded.add(i);
-    body.style.background=c.bg;
-    body.style.borderColor=c.border;
-    body.style.borderLeftColor=c.dot;
+    if(!checked.has(i)){body.style.background=c.bg;body.style.borderColor=c.border;body.style.borderLeftColor=c.dot;}
     if(note) note.style.display='block';
   }
 }
@@ -596,8 +734,12 @@ async function getReminder(){
   document.getElementById('rem-out').style.display='none';
 
   const now=new Date();
-  const lines=(currentRecord.schedule.schedule||[]).map(s=>`${s.time} — ${s.task} (${s.duration})`).join('\n');
-  const prompt=`${REM_SYS}\n\nCurrent time: ${now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})} on ${now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}.\n\nSchedule:\n${lines}\n\nWhat should I be doing RIGHT NOW?`;
+  const allItems=currentRecord.schedule.schedule||[];
+  const lines=allItems.map((s,i)=>{
+    const status=checked.has(i)?'✓ DONE':'PENDING';
+    return `${s.time} — ${s.task} (${s.duration}) [${status}]`;
+  }).join('\n');
+  const prompt=`Current time: ${now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})} on ${now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}.\n\nSchedule (with completion status):\n${lines}\n\nFocus on PENDING tasks only. What should I be doing RIGHT NOW?`;
 
   try{
     const res=await fetch('https://api.groq.com/openai/v1/chat/completions',
@@ -641,6 +783,7 @@ function viewHistory(i){
   if(!history[i]) return;
   currentRecord=history[i];
   expanded=new Set();
+  checked=new Set();
   renderSchedule(history[i].schedule);
   goTab('schedule');
 }
